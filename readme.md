@@ -1,6 +1,6 @@
 pip install mitmproxy
 
-mitmproxy --listen-port 8080
+mitmproxy  --intercept 'host==baidu.com.com && method=="GET"' --listen-port 8080
 
 <!--手机 http://mitm.it  安装证书 并信任 -->
 
