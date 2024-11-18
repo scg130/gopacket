@@ -2,11 +2,16 @@ package main
 
 import (
 	"bufio"
+	"crypto/tls"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/gopacket"
 	"github.com/google/gopacket/layers"
@@ -24,6 +29,13 @@ var (
 
 func main() {
 	run()
+
+	// req, _ := http.NewRequest("GET", "https://github.com", nil)
+	// rsp, err := Request(req)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// fmt.Println(string(rsp))
 }
 
 func run() {
@@ -34,16 +46,37 @@ func run() {
 	}
 	defer handle.Close()
 
-	handle.SetBPFFilter("ip dst 223.252.215.2 or ip src 223.252.215.2")
+	// handle.SetBPFFilter("ip dst 220.181.38.251 or ip src 220.181.38.251")
 
 	// Use the handle as a packet source to process all packets
 	packetSource := gopacket.NewPacketSource(handle, handle.LinkType())
 	for packet := range packetSource.Packets() {
-		// Process packet here
+		for _, layer := range packet.Layers() {
+			fmt.Printf("Layer Type: %s\n", layer.LayerType())
+			fmt.Printf("Layer Payload: %x\n", layer.LayerPayload())
+			fmt.Printf("Layer content: %x\n", layer.LayerContents())
+		}
 
-		printInfo(packet)
+		// tlsLayer := packet.Layer(layers.LayerTypeTLS)
+		// if tlsLayer != nil {
+		// 	tls, _ := tlsLayer.(*layers.TLS)
+		// 	fmt.Println(tls.AppData, tls.Contents, tls.Payload)
+		// }
+
+		// printInfo(packet)
 		// printPacketInfo(packet)
 	}
+}
+
+func handleTLSHandshake(record layers.TLSAppDataRecord) {
+	// Here, record.Data will contain the raw bytes of the handshake message
+	fmt.Printf("Handshake data: %x\n", record.Payload)
+}
+
+// Handle a TLS application data record (e.g., HTTP over TLS)
+func handleTLSApplicationData(record layers.TLSAppDataRecord) {
+	// Print raw application data (could be encrypted HTTP traffic)
+	fmt.Printf("Application data (encrypted): %x\n", record.Payload)
 }
 
 func printInfo(packet gopacket.Packet) {
@@ -52,7 +85,25 @@ func printInfo(packet gopacket.Packet) {
 		applicationLayer := packet.ApplicationLayer()
 		if applicationLayer != nil {
 			payload := string(applicationLayer.Payload())
-			fmt.Println(payload)
+			data := packet.Data()
+			fmt.Println(string(data))
+			// Decode hex to bytes
+			decodedData, err := hex.DecodeString(string(data))
+			fmt.Println(decodedData)
+			if err != nil {
+				fmt.Println("Hex Decoding Error:", err)
+				return
+			}
+
+			// Convert decoded data to string if it's valid UTF-8
+			if utf8.Valid(decodedData) {
+				plaintext := string(decodedData)
+				fmt.Println("Readable Hex Decoded Text:")
+				fmt.Println(plaintext)
+			} else {
+				fmt.Println("Decoded data is not valid UTF-8.")
+			}
+
 			if strings.HasPrefix(payload, "GET") || strings.HasPrefix(payload, "POST") {
 				requestReader := strings.NewReader(payload)
 				req, err := http.ReadRequest(bufio.NewReader(requestReader))
@@ -61,14 +112,30 @@ func printInfo(packet gopacket.Packet) {
 					return
 				}
 				defer req.Body.Close()
-				rsp, err := Request(req, "http://")
+				fmt.Println(req.Host, req.Method, req.Proto)
+				rsp, err := Request(req)
 				if err != nil {
 					return
 				}
-				fmt.Println(string(rsp))
+				_ = rsp
+				// fmt.Println(string(rsp))
 			}
 		}
 	}
+}
+
+func Request(req *http.Request) ([]byte, error) {
+	wr, _ := os.OpenFile("./data/sshkey.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	client := &http.Client{
+		Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true, KeyLogWriter: wr}},
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	bytes, _ := io.ReadAll(resp.Body)
+	return bytes, nil
 }
 
 // printPacketInfo函数解析并打印数据包信息

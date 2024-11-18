@@ -24,7 +24,9 @@ func (a *AddHeader) Response(f *proxy.Flow) {
 	// fmt.Println(f.Response.Header)
 	if f.Request.URL.Path == "/app/course/selectCourse" {
 		f.Response.Body = []byte(`{"code":200,"data":"ok"}`)
+
 	}
+
 }
 
 func main() {
