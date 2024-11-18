@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+
 	log "github.com/sirupsen/logrus"
 
 	"github.com/lqqyt2423/go-mitmproxy/proxy"
@@ -15,8 +17,9 @@ type AddHeader struct {
 func (a *AddHeader) Request(f *proxy.Flow) {
 	a.count += 1
 	// f.Response.Header.Add("x-count", strconv.Itoa(a.count))
-	// fmt.Println(string(f.Request.Body))
+	fmt.Println(string(f.Request.Body))
 	// fmt.Println(f.Request.Header)
+	// fmt.Println(f.Request.URL)
 }
 
 func (a *AddHeader) Response(f *proxy.Flow) {
@@ -24,9 +27,8 @@ func (a *AddHeader) Response(f *proxy.Flow) {
 	// fmt.Println(f.Response.Header)
 	if f.Request.URL.Path == "/app/course/selectCourse" {
 		f.Response.Body = []byte(`{"code":200,"data":"ok"}`)
-
 	}
-
+	// fmt.Println(string(f.Request.Body))
 }
 
 func main() {
